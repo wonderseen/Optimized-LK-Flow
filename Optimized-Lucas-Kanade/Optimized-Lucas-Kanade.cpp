@@ -71,7 +71,7 @@ int main(int argc, char** argv)
     else if (argc == 2)
         cap.open(argv[1]);
 
-    cap.open("VideoTest.avi");
+    cap.open("VideoTest.mp4");
     namedWindow("Capture Window", 1);
     setMouseCallback("Capture Window", onMouse, 0); 
     Mat frame_1, frame_2;
