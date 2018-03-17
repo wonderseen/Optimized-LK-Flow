@@ -1,8 +1,9 @@
 /**
  * Owner: WonderSeen
- * 2018.3.13
+ * 2018.3.17
  * Xiamen University, China 
  * Lisence: WonderSeen
+ * Being Perfect...
  */
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -24,10 +25,12 @@
 using namespace cv;
 using namespace std;
 
-
+#define SIFTPoint vector<Point2d>
 
 namespace wonderseen 
-{
+{   
+    typedef const Mat& InputMat;
+    typedef const Mat& OutputMat;
     class CV_EXPORTS Corner
     {
         // methods
@@ -36,12 +39,13 @@ namespace wonderseen
             Corner(const size_t num) : corner_State( true ){ this->corners.resize(num); };
             ~Corner(){};
 
-            typedef const _InputArray& InputArray;
-            bool goodFeaturesToTrack(   Mat& image1, Mat& image2, int maxCorners, double qualityLevel, double minDistance,
-                                        int blockSize = 3, double k = 0.04 )
-            /* compute the harris corners in pyramid images */
+
+            bool goodSIFTToTrack( InputMat image1, InputMat image2, SIFTPoint &fp,
+                                int maxCorners, double qualityLevel, double minDistance,
+                                int blockSize = 3, double k = 0.04 )
+            /* compute the SIFT-Harris corners in pyramid images */
             {
-                Mat image = image2-image1;
+                Mat image = image2/2. + image1/2.;
                 if(image.type() != CV_8UC1)
                 {
                     cout << image.type() << endl;
@@ -49,77 +53,38 @@ namespace wonderseen
                 }
 
                 // conv windows
-                double alpha = 1.5;
+                double alpha = 1.2; // 1.2**4 = 2
                 
                 // pyramid image
-                // diff1
-                Mat lever1, diff1, lever2, diff2, lever3, diff3; 
-                Mat lever11, lever22, lever33; 
+                Mat diff1, diff2, diff3; 
+                Mat lever1, lever2, lever3, lever4; 
+
+                image.convertTo(image,CV_32FC1);
+                cv::resize(image, image, Size(), 0.5, 0.5, INTER_NEAREST);
                 
-                lever1 = image;
                 GaussianBlur(image, lever1, Size(blockSize,blockSize), alpha, alpha);
-                diff1 = lever1 - lever11;
-
-                // diff2
-                cv::resize(lever1, lever2, Size(), 0.25, 0.25);
-                GaussianBlur(lever2, lever22, Size(blockSize,blockSize), alpha, alpha);
-                diff2 = lever2 - lever22;
-
-                // diff3
-                cv::resize(lever2, lever3, Size(), 0.5, 0.5);
-                GaussianBlur(lever3, lever33, Size(blockSize,blockSize), alpha, alpha);
-                diff3 = lever3 - lever33;
-
-                Mat dx1(lever1.size(), CV_32FC1, Scalar(0.0) );
-                Mat dx2(lever2.size(), CV_32FC1, Scalar(0.0) );
-                Mat dx3(lever3.size(), CV_32FC1, Scalar(0.0) );
-                Mat dy1(lever1.size(), CV_32FC1, Scalar(0.0) );
-                Mat dy2(lever2.size(), CV_32FC1, Scalar(0.0) );
-                Mat dy3(lever3.size(), CV_32FC1, Scalar(0.0) );
-                Mat transX1(lever1.size(), CV_32FC1, Scalar(0.0) );
-                Mat transX2(lever2.size(), CV_32FC1, Scalar(0.0) );
-                Mat transX3(lever3.size(), CV_32FC1, Scalar(0.0) );
-                Mat transY1(lever1.size(), CV_32FC1, Scalar(0.0) );
-                Mat transY2(lever2.size(), CV_32FC1, Scalar(0.0) );
-                Mat transY3(lever3.size(), CV_32FC1, Scalar(0.0) );
-
-                //computeXYvector(lever1, dx1, dy1, transX1, transY1);
-                //computeXYvector(lever2, dx2, dy2, transX2, transY2);
-                computeXYvector(lever3, dx3, dy3, transX3, transY3);
+                GaussianBlur(lever1, lever2, Size(blockSize,blockSize), alpha, alpha);
+                GaussianBlur(lever2, lever3, Size(blockSize,blockSize), alpha, alpha);
+                GaussianBlur(lever3, lever4, Size(blockSize,blockSize), alpha, alpha);
                 
-                cv::resize(image1, image1, Size(), 0.125, 0.125);
-                cv::resize(image2, image2, Size(), 0.125, 0.125);
-                transPreToNew(image1, transX3, transY3);
-                cv::resize(image1, image1, Size(), 8, 8);
-                cv::resize(image2, image2, Size(), 8, 8);
-                imshow("preTransform", image1);
-                imshow("Now", image2);
-                waitKey(10000);
+                // gau-diff
+                diff1 = lever2 - lever1;
+                diff2 = lever3 - lever2;
+                diff3 = lever4 - lever3;
 
-                cv::resize(dx1, dx1, Size(), 1, 1);
-                cv::resize(dy1, dy1, Size(), 1, 1);
-                cv::resize(dx2, dx2, Size(), 4, 4);
-                cv::resize(dy2, dy2, Size(), 4, 4);
-                cv::resize(dx3, dx3, Size(), 8, 8);
-                cv::resize(dy3, dy3, Size(), 8, 8);
+                // get fp and draw
+                genFeaturePoint(diff1, fp, 10.);
+                Mat src(image.size(),CV_8UC3, Scalar(0,0,0));
+                for(int i=0; i<fp.size(); i++)
+                {
+                    circle(src, fp[i], 2, Scalar(0,255,255), -1, 8);
+                }
 
-                Mat resultx = dx3;
-                Mat resulty = dy3;
-
-                Mat resultxy;
-                magnitude(resultx, resulty, resultxy);
-                resultxy = (resultxy > 100 );
-                DisplayFlow(resultx, resulty, 200.);
-
-                Mat Erodeelement = getStructuringElement(MORPH_RECT, Size(4,4));
-                erode(resultxy, resultxy, Erodeelement);
-
-                //imshow("resultx", resultx);
-                //imshow("resulty", resulty);
-                //imshow("resultxy", resultxy);
-                //waitKey(10);
-
-                Mat harris_l3;
+                imshow("diff1", diff1);
+                imshow("diff2", diff2);
+                imshow("diff3", diff3);
+                imshow("raw_gray", src);
+                waitKey(10);
 
                 if(corners.size() != 0)
                 {
@@ -130,7 +95,49 @@ namespace wonderseen
                     return false;
             }
 
-            void conv(Mat& mask, Mat& raw, Mat& output, size_t step=1)
+
+            void genFeaturePoint(InputMat inputmat,  SIFTPoint &fp, float threshold=1.f)
+            {
+                /**
+                 * threshold  -- must bigger than 0. 
+                 *               if I(j,i)-I(x,y) bigger than threshold, judge (x,y) as non-fp
+                 *               
+                 * fp         -- feature points
+                 * blockW/blockH/stepx/stepy
+                 *            -- compare windows parameter
+                */
+                int imageW = inputmat.cols, imageH = inputmat.rows;
+                int blockW = 1, blockH = 1; // must be odd, half of the blocksize
+                int stepx = 2, stepy = 2;
+                for(int x=blockW; x<imageW-blockW; x+=stepx)
+                    for(int y=blockH; y<imageH-blockH; y+=stepy)
+                    {
+                        bool goodFeature = true;
+                        float tmp = inputmat.at<float>(y,x);
+                        for(int i=-blockW; i<=blockW; i++)
+                            for(int j=-blockH; j<=blockH; j++)
+                            {
+                                // judge whether the temp is the smallest of a small region
+                                if(inputmat.at<float>(j,i)-tmp < threshold)
+                                {
+                                    goodFeature = false;
+                                    break;
+                                }
+                            }
+                        if(goodFeature)
+                        {
+                            fp.push_back(cv::Point2d(x,y));
+                        }
+                    }
+                if(fp.size() == 0)
+                {
+                    cout << "no feature points!" << endl;
+                    return;
+                }
+            }
+
+
+            void conv(InputMat mask, InputMat raw, OutputMat output, size_t step=1)
             {
                 int imageW = raw.cols, imageH = raw.rows;
                 int blockW = mask.cols, blockH = mask.rows;
@@ -208,7 +215,6 @@ namespace wonderseen
                     for(int i=0; i<diff.cols-1; i++)
                         for(int j=0; j<diff.rows-1; j++)
                         {
-                            cout << transX.at<float>(j,i) << endl;
                             transX.at<float>(j,i) = i +
                              outdy.at<float>(j,i)/dy * (eVectorsMat.at<float>(0,0)/eVectorsMat.at<float>(0,1) ) * eValuesMat.at<float>(0,0);
                             transY.at<float>(j,i) = i +
