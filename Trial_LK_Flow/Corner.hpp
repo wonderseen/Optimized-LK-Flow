@@ -1,9 +1,15 @@
 /**
- * Author: WonderSeen
- * 2018.3 .13
- * Xiamen University, China 
- * Lisence: WonderSeen
+ * Author  | WonderSeen
+ * Date    | 2018.3.20
+ * Univ.   | Xiamen University, China 
+ * 
+ * Based on OpenCV, the script includes:
+ *      1.CLASS and correlative METHODS 
+ *          for feature point 
+ *      2.ALGORITHMS 
+ *          for Sift-Feature-Point-Searching / Key-Point-Local-tracking / 
  */
+
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #pragma once //只要在头文件的最开始加入这条杂注，就能够保证头文件只被编译一次。
@@ -38,19 +44,23 @@ namespace wonderseen
             Corner(const size_t num) : corner_State( true ){ this->corners.resize(num); };
             ~Corner(){};
             
-            /* two corner add_up */
             friend double operator+( const vector<Point> & b);
             vector<Point> operator+(const vector<Point> & b)
+            /**
+             *  two corner add_up
+             */
             {
                 corners.insert(corners.end(), b.begin(), b.end());
                 return corners;
             }
 
             // inline 相当于提前静态编译,宏替换函数
-            inline bool goodSIFTToTrack( InputMat image1, InputMat image2, SIFTPoint &fp,
+            inline bool goodSiftPoints( InputMat image1, InputMat image2, SIFTPoint &fp,
                                 int maxCorners, double qualityLevel, double minDistance,
                                 int blockSize = 3, double k = 0.04 )
-            /* compute the SIFT-Harris corners in pyramid images */
+            /**
+             * compute the SIFT-Harris corners in pyramid images
+             */
             {
                 Mat image = image2/2. + image1/2.;
                 if(image.type() != CV_8UC1)
@@ -58,9 +68,6 @@ namespace wonderseen
                     cout << image.type() << endl;
                     cvtColor(image, image, COLOR_BGR2GRAY);
                 }
-
-                // gaussion strength
-                double alpha = 1.2; // 1.2**4 = 2
                 
                 // pyramid image
                 Mat diff1, diff2, diff3; 
@@ -68,7 +75,9 @@ namespace wonderseen
 
                 image.convertTo(image,CV_32FC1);
                 cv::resize(image, image, Size(), 0.5, 0.5, INTER_NEAREST);
-                
+
+                // gaussion strength
+                double alpha = 1.2; // 1.2**4 = 2                
                 GaussianBlur(image, lever1, Size(blockSize,blockSize), alpha, alpha);
                 GaussianBlur(lever1, lever2, Size(blockSize,blockSize), alpha, alpha);
                 GaussianBlur(lever2, lever3, Size(blockSize,blockSize), alpha, alpha);
@@ -81,42 +90,48 @@ namespace wonderseen
 
                 // get fp and draw
                 genFeaturePoint(diff1, fp, 10.);
-                Mat src(image.size(),CV_8UC3, Scalar(0,0,0));
-                for(int i=0; i<fp.size(); i++)
-                {
-                    circle(src, fp[i], 2, Scalar(0,255,255), -1, 8);
-                }
+                showPointOnRGB(fp, image);
 
                 imshow("diff1", diff1);
                 imshow("diff2", diff2);
                 imshow("diff3", diff3);
-                imshow("raw_gray", src);
-                waitKey(10);
 
                 if(corners.size() != 0)
                 {
                     corner_State = true;
                     return true;
                 }
-                else
-                    return false;
+                else return false;
             }
 
-
-            inline void genFeaturePoint(InputMat inputmat,  SIFTPoint &fp, float threshold=1.f)
+            void showPointOnRGB(vector<Point2d>& fp, InputArray image)
             {
-                /**
-                 * threshold  -- must bigger than 0. 
-                 *               if I(j,i)-I(x,y) bigger than threshold, judge (x,y) as non-fp
-                 *               
-                 * fp         -- feature points
-                 * blockW/blockH/stepx/stepy
-                 *            -- compare windows parameter
-                */
+                Mat src(image.size(),CV_8UC3, Scalar(0,0,0));
+                for(int i=0; i<fp.size(); i++)
+                {
+                    circle(src, fp[i], 2, Scalar(0,255,255), -1, 8);
+                }
+                imshow("feature points", src);
+                waitKey(10);
+            }
+
+            inline std::size_t genFeaturePoint(InputMat inputmat,  SIFTPoint &fp, float threshold=1.f)
+            /**
+            * threshold     -- must bigger than 0. 
+            *                  if I(j,i)-I(x,y) bigger than threshold, judge Point(x,y) as non-fp               
+            * fp            -- feature points
+            * blockW/blockH -- compare windows parameter
+            * stepx/stepy   -- search step
+            * 
+            * return        -- numbers of feature points found
+            * Done on 2018.03.19
+            */
+            {
                 int imageW = inputmat.cols, imageH = inputmat.rows;
                 int blockW = 1, blockH = 1; // must be odd, half of the blocksize
                 int stepx = 2, stepy = 2;
                 for(int x=blockW; x<imageW-blockW; x+=stepx)
+                {
                     for(int y=blockH; y<imageH-blockH; y+=stepy)
                     {
                         bool goodFeature = true;
@@ -125,22 +140,25 @@ namespace wonderseen
                             for(int j=-blockH; j<=blockH; j++)
                             {
                                 // judge whether the temp is the smallest of a small region
-                                if(inputmat.at<float>(j,i)-tmp < threshold)
-                                {
-                                    goodFeature = false;
-                                    break;
-                                }
+                                if( inputmat.at<float>(j,i)-tmp < threshold ) // the center the lowest
+                                    if( pow( (inputmat.at<float>(j,i)-tmp)/tmp, 2) < threshold) //  non-linear to choose the better
+                                    {
+                                        goodFeature = false;
+                                        break;
+                                    }
                             }
                         if(goodFeature)
                         {
                             fp.push_back(cv::Point2d(x,y));
                         }
                     }
+                }
                 if(fp.size() == 0)
                 {
                     cout << "no feature points!" << endl;
-                    return;
+                    return 0;
                 }
+                return fp.size();
             }
 
 
@@ -163,6 +181,9 @@ namespace wonderseen
 
 
             inline void transPreToNew(Mat& image, Mat& transX, Mat& transY)
+            /**
+             *  Make 2d affine spatial transform to the image according to transX and transY 
+             */
             {
                 int imageW = image.cols-1;
                 int imageH = image.rows-1;
@@ -179,8 +200,10 @@ namespace wonderseen
             inline void computeXYvector(Mat& diff, 
                                  Mat& outdx, Mat& outdy, 
                                  Mat& transX, Mat& transY )
+            /**
+             * calculate the top pymarid flow XY vector
+            */
             {
-                // calculate the top pymarid flow XY vector
                 float dx=0., dy=0.;
                 for(int i=0; i<diff.cols-1; i++)
                     for(int j=0; j<diff.rows-1; j++)
@@ -232,6 +255,7 @@ namespace wonderseen
                 }
             }
 
+
             void DisplayFlow(Mat& flowx, Mat& flowy, float threshold)
             {
                 Mat dis(flowx.size(), CV_8UC3, Scalar(0,0,0));
@@ -246,6 +270,7 @@ namespace wonderseen
                 imshow("arrow", dis);
                 waitKey(10);
             }
+
 
             void drawArrow(Mat& img, Point pStart, Point pEnd, int len, int alpha, Scalar color, int thickness, int lineType)
             /**
