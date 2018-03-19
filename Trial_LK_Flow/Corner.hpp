@@ -12,7 +12,7 @@
 
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
-#pragma once //只要在头文件的最开始加入这条杂注，就能够保证头文件只被编译一次。
+#pragma once //make sure included once
 
 #define DEBUG
 #ifdef DEGUG
@@ -54,7 +54,7 @@ namespace wonderseen
                 return corners;
             }
 
-            // inline 相当于提前静态编译,宏替换函数
+
             inline bool goodSiftPoints( InputMat image1, InputMat image2, SIFTPoint &fp,
                                 int maxCorners, double qualityLevel, double minDistance,
                                 int blockSize = 3, double k = 0.04 )
