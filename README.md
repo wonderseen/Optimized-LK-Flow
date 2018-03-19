@@ -1,5 +1,5 @@
 # Optimized-LK-Flow
-A trial to optimized LK-FLOW by Minimum mean square error filtering.
+A trial to optimized LK-FLOW by Minimum mean square error filtering in the "Optimized-Lucas-Kanade" dictionary.
 
 Besides, I try to achieve the "goodfeaturetracking" and "LK_FLOW" functions on my own out of opencv's encapsulation and the scripts are in the "Trial_LK_Flow" dictionary.
 
