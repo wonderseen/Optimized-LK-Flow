@@ -1,13 +1,12 @@
 /**
- * Owner: WonderSeen
- * 2018.3.17
+ * Author: WonderSeen
+ * 2018.3 .13
  * Xiamen University, China 
  * Lisence: WonderSeen
- * Being Perfect...
  */
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
-#pragma once  
+#pragma once //只要在头文件的最开始加入这条杂注，就能够保证头文件只被编译一次。
 
 #define DEBUG
 #ifdef DEGUG
@@ -38,9 +37,17 @@ namespace wonderseen
             Corner(){};
             Corner(const size_t num) : corner_State( true ){ this->corners.resize(num); };
             ~Corner(){};
+            
+            /* two corner add_up */
+            friend double operator+( const vector<Point> & b);
+            vector<Point> operator+(const vector<Point> & b)
+            {
+                corners.insert(corners.end(), b.begin(), b.end());
+                return corners;
+            }
 
-
-            bool goodSIFTToTrack( InputMat image1, InputMat image2, SIFTPoint &fp,
+            // inline 相当于提前静态编译,宏替换函数
+            inline bool goodSIFTToTrack( InputMat image1, InputMat image2, SIFTPoint &fp,
                                 int maxCorners, double qualityLevel, double minDistance,
                                 int blockSize = 3, double k = 0.04 )
             /* compute the SIFT-Harris corners in pyramid images */
@@ -52,7 +59,7 @@ namespace wonderseen
                     cvtColor(image, image, COLOR_BGR2GRAY);
                 }
 
-                // conv windows
+                // gaussion strength
                 double alpha = 1.2; // 1.2**4 = 2
                 
                 // pyramid image
@@ -96,7 +103,7 @@ namespace wonderseen
             }
 
 
-            void genFeaturePoint(InputMat inputmat,  SIFTPoint &fp, float threshold=1.f)
+            inline void genFeaturePoint(InputMat inputmat,  SIFTPoint &fp, float threshold=1.f)
             {
                 /**
                  * threshold  -- must bigger than 0. 
@@ -137,7 +144,11 @@ namespace wonderseen
             }
 
 
-            void conv(InputMat mask, InputMat raw, OutputMat output, size_t step=1)
+            const void conv(const InputMat mask, const InputMat raw, OutputMat output, size_t step=1)
+            /**
+             * convolution on a map.
+             * Not done yet.
+            */
             {
                 int imageW = raw.cols, imageH = raw.rows;
                 int blockW = mask.cols, blockH = mask.rows;
@@ -151,7 +162,7 @@ namespace wonderseen
             }
 
 
-            void transPreToNew(Mat& image, Mat& transX, Mat& transY)
+            inline void transPreToNew(Mat& image, Mat& transX, Mat& transY)
             {
                 int imageW = image.cols-1;
                 int imageH = image.rows-1;
@@ -165,9 +176,7 @@ namespace wonderseen
             }
 
 
-
-
-            void computeXYvector(Mat& diff, 
+            inline void computeXYvector(Mat& diff, 
                                  Mat& outdx, Mat& outdy, 
                                  Mat& transX, Mat& transY )
             {
@@ -176,7 +185,7 @@ namespace wonderseen
                 for(int i=0; i<diff.cols-1; i++)
                     for(int j=0; j<diff.rows-1; j++)
                     {
-                        // 计算差分图像的x和y梯度
+                        // cal the gradient of x_coordinate and y_coorinate
                         outdx.at<float>(j,i) = float(diff.at<char>(j,i+1) - diff.at<char>(j, i-1));
                         //outdx.at<float>(j,i) += float(diff.at<char>(j+1,i+1) - diff.at<char>(j-1, i-1));
                         //outdx.at<float>(j,i) += float(diff.at<char>(j-1,i+1) - diff.at<char>(j+1, i-1));
@@ -188,7 +197,7 @@ namespace wonderseen
                         dy += outdy.at<float>(j,i);
                     }
 
-                // 根据梯度矩阵,计算转移特征向量和特征值,作为位移向量
+                // calculate eigen vectors(特征向量) and eigen values(特征值) as global flow
                 double myArray[2][2] = {
                     dx*dx, dx*dy,
                     dx*dy, dy*dy,
@@ -230,8 +239,8 @@ namespace wonderseen
                     for(int j=0; j<flowx.rows-1; j++)
                     {
                         if( abs(flowx.at<float>(j,i)) > threshold || abs(flowy.at<float>(j,i)) > threshold )
-                        drawArrow(dis, Point(i,j), \
-                                    Point(i+flowx.at<float>(j,i)/10, j+flowy.at<float>(j,i)/10),\ 
+                        drawArrow(dis, Point(i,j), 
+                                    Point(i+flowx.at<float>(j,i)/10, j+flowy.at<float>(j,i)/10),
                                     10, 10, Scalar(0, 255, 255), 1, 1);
                     }
                 imshow("arrow", dis);
@@ -239,13 +248,20 @@ namespace wonderseen
             }
 
             void drawArrow(Mat& img, Point pStart, Point pEnd, int len, int alpha, Scalar color, int thickness, int lineType)
+            /**
+             * Draw an arrow.
+             * Step 1:
+             *      draw the vector of (start -> end)
+             * Step 2:
+             *      draw the 2-side header at the defined end point
+            */
             {
                 const double PI = 3.1415926;
                 Point arrow;
-                //计算 θ 角（最简单的一种情况在下面图示中已经展示，关键在于 atan2 函数，详情见下面）   
+                // step 1
                 double angle = atan2((double)(pStart.y - pEnd.y), (double)(pStart.x - pEnd.x));  
                 line(img, pStart, pEnd, color, thickness, lineType);   
-                //计算箭角边的另一端的端点位置（上面的还是下面的要看箭头的指向，也就是pStart和pEnd的位置） 
+                // step 2
                 arrow.x = pEnd.x + len * cos(angle + PI * alpha / 180);
                 arrow.y = pEnd.y + len * sin(angle + PI * alpha / 180);
                 line(img, pEnd, arrow, color, thickness, lineType);
@@ -255,13 +271,12 @@ namespace wonderseen
             }
 
             #ifdef DEGUG
-            virtual void ShowState()
+            virtual void ShowState()// virtual是实现多态动态绑定的基础,通过指针可以访问到子类的同名方法
             {
                 cout << "corner_State is " << flag << endl;
             }
             #endif
 
-            
         // variables
         public:
             bool corner_State;
