@@ -1,6 +1,6 @@
 /**
  * Author  | WonderSeen
- * Date    | 2018.3.20
+ * Date    | 2018.3.26
  * Univ.   | Xiamen University, China 
  * 
  * Based on OpenCV, the script includes:
@@ -12,7 +12,7 @@
 
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
-#pragma once //make sure included once
+#pragma once //只要在头文件的最开始加入这条杂注，就能够保证头文件只被编译一次。
 
 #define DEBUG
 #ifdef DEGUG
@@ -42,7 +42,7 @@ namespace wonderseen
         public:
             Corner(){};
             Corner(const size_t num) : corner_State( true ){ this->corners.resize(num); };
-            ~Corner(){};
+            virtual ~Corner(){};
             
             friend double operator+( const vector<Point> & b);
             vector<Point> operator+(const vector<Point> & b)
@@ -54,8 +54,8 @@ namespace wonderseen
                 return corners;
             }
 
-
-            inline bool goodSiftPoints( InputMat image1, InputMat image2, SIFTPoint &fp,
+            // inline 相当于提前静态编译,宏替换函数
+            inline const bool goodSiftPoints( InputMat image1, InputMat image2,
                                 int maxCorners, double qualityLevel, double minDistance,
                                 int blockSize = 3, double k = 0.04 )
             /**
@@ -89,8 +89,8 @@ namespace wonderseen
                 diff3 = lever4 - lever3;
 
                 // get fp and draw
-                genFeaturePoint(diff1, fp, 10.);
-                showPointOnRGB(fp, image);
+                genFeaturePoint(diff1, 10.);
+                showPointOnRGB(image);
 
                 imshow("diff1", diff1);
                 imshow("diff2", diff2);
@@ -104,10 +104,10 @@ namespace wonderseen
                 else return false;
             }
 
-            void showPointOnRGB(vector<Point2d>& fp, InputArray image)
+            const void showPointOnRGB( InputArray image)
             {
                 Mat src(image.size(),CV_8UC3, Scalar(0,0,0));
-                for(int i=0; i<fp.size(); i++)
+                for(int i=0; i < fp.size(); i++)
                 {
                     circle(src, fp[i], 2, Scalar(0,255,255), -1, 8);
                 }
@@ -115,7 +115,7 @@ namespace wonderseen
                 waitKey(10);
             }
 
-            inline std::size_t genFeaturePoint(InputMat inputmat,  SIFTPoint &fp, float threshold=1.f)
+            inline const std::size_t genFeaturePoint(InputMat inputmat, float threshold=1.f)
             /**
             * threshold     -- must bigger than 0. 
             *                  if I(j,i)-I(x,y) bigger than threshold, judge Point(x,y) as non-fp               
@@ -127,6 +127,12 @@ namespace wonderseen
             * Done on 2018.03.19
             */
             {
+                if(this->initialflag || fp.size() != 0)
+                {
+                    cout << "Feature Points initialized Already." << endl;
+                    cout << "ReInitialize Feature Points" << endl;
+                    fp.clear();
+                }
                 int imageW = inputmat.cols, imageH = inputmat.rows;
                 int blockW = 1, blockH = 1; // must be odd, half of the blocksize
                 int stepx = 2, stepy = 2;
@@ -158,6 +164,7 @@ namespace wonderseen
                     cout << "no feature points!" << endl;
                     return 0;
                 }
+                this->initialflag = true;
                 return fp.size();
             }
 
@@ -179,8 +186,56 @@ namespace wonderseen
                             }
             }
 
+            inline const size_t track_FeaturePoint( std::vector<Point2d>& prePoints,
+                                              std::vector<Point2d>& restPoints,
+                                              Mat& frame )
+            /**
+             * track the featurepoint and return their motion
+             * Not done yet.
+             * 回环检测
+            */
+            {
+                int blockSize = 5;
+                double alpha = 1.4; // 1.1**8 = 2                
 
-            inline void transPreToNew(Mat& image, Mat& transX, Mat& transY)
+                Mat image = frame.clone();
+                if(image.type() != CV_8UC1)
+                {
+                    cvtColor(image, image, COLOR_BGR2GRAY);
+                }
+                
+                // pyramid image
+                Mat diff1, diff2, diff3, diff4;
+                Mat lever1, lever2, lever3, lever4;
+                Mat glever1, glever2, glever3, glever4;
+
+                image.convertTo(image,CV_32FC1);
+                cv::resize(image, lever1, Size(), 0.5, 0.5, INTER_NEAREST);
+                cv::resize(lever1, lever2, Size(), 0.5, 0.5, INTER_NEAREST);
+                cv::resize(lever2, lever3, Size(), 0.5, 0.5, INTER_NEAREST);
+                cv::resize(lever3, lever4, Size(), 0.5, 0.5, INTER_NEAREST);
+
+                // gaussion strength
+                GaussianBlur(lever1, glever1, Size(blockSize,blockSize), alpha, alpha);
+                GaussianBlur(lever2, glever2, Size(blockSize,blockSize), alpha, alpha);
+                GaussianBlur(lever3, glever3, Size(blockSize,blockSize), alpha, alpha);
+                GaussianBlur(lever4, glever4, Size(blockSize,blockSize), alpha, alpha);
+                
+                // gau-diff
+                diff1 = glever1 - lever1;
+                diff2 = glever2 - lever2;
+                diff3 = glever3 - lever3;
+                diff4 = glever4 - lever4;
+
+                // get fp and draw
+
+                imshow("diff1", diff1);
+                imshow("diff2", diff2);
+                imshow("diff3", diff3);
+
+            }
+
+            inline const void transPreToNew(Mat& image, Mat& transX, Mat& transY)
             /**
              *  Make 2d affine spatial transform to the image according to transX and transY 
              */
@@ -197,7 +252,7 @@ namespace wonderseen
             }
 
 
-            inline void computeXYvector(Mat& diff, 
+            inline const void computeXYvector( Mat& diff, 
                                  Mat& outdx, Mat& outdy, 
                                  Mat& transX, Mat& transY )
             /**
@@ -255,8 +310,7 @@ namespace wonderseen
                 }
             }
 
-
-            void DisplayFlow(Mat& flowx, Mat& flowy, float threshold)
+            const void DisplayFlow(Mat& flowx, Mat& flowy, float threshold)
             {
                 Mat dis(flowx.size(), CV_8UC3, Scalar(0,0,0));
                 for(int i=0; i<flowx.cols-1; i++)
@@ -271,8 +325,7 @@ namespace wonderseen
                 waitKey(10);
             }
 
-
-            void drawArrow(Mat& img, Point pStart, Point pEnd, int len, int alpha, Scalar color, int thickness, int lineType)
+            const void drawArrow(Mat& img, Point pStart, Point pEnd, int len, int alpha, Scalar color, int thickness, int lineType)
             /**
              * Draw an arrow.
              * Step 1:
@@ -307,5 +360,7 @@ namespace wonderseen
             bool corner_State;
             enum CornerType{ HARRIS_CORNER=0, SHI_TOMASI_CORNER=1 };
             vector<Point> corners;
+            SIFTPoint fp;
+            bool initialflag = false;
     };
 }
