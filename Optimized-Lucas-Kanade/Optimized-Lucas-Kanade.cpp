@@ -97,7 +97,7 @@ int main(int argc, char** argv)
         cvtColor(image, gray, COLOR_BGR2GRAY);
         if (needToInit)
         {
-            goodFeaturesToTrack(gray, points[1],maxCorners, quality_Corners, minDistance_Corners, Mat(), blockSize, 1, K_corner);
+            goodFeaturesToTrack(gray, points[1],maxCorners, quality_Corners, minDistance_Corners, Mat(), blockSize, true, K_corner);
             cornerSubPix(gray, points[1],subPixWinSize, Size(-1, -1), termcrit);
             addRemovePt = false;
         }
